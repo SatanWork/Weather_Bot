@@ -218,7 +218,7 @@ async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if forecast_weather == "Rain":
                 caption += "\nПрогноз: дождь. Не забудьте взять зонт!"
             else:
-                caption += f"\nПрогноз: {forecast_desc}"
+                caption += f"\nВ ближайшее время ожидается: {forecast_desc}"
         else:
             caption += "\nПогода не изменится."
 
