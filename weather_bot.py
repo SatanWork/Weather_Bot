@@ -6,7 +6,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-from telegram.request import Request  # Исправленный импорт
+from telegram.request.request import Request # Исправленный импорт
 
 # Настройка логирования
 logging.basicConfig(
