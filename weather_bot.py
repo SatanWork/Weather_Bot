@@ -161,7 +161,7 @@ def generate_weather_image(weather: dict, forecast: dict, location: str):
         else:
             forecast_message = "Погода не изменится."
 
-        draw.text((50, 200), forecast_message, fill="black", font=font)
+        draw.text((50, 300), forecast_message, fill="black", font=font)
 
     # Сохраняем картинку в BytesIO
     img_byte_arr = BytesIO()
