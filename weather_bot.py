@@ -7,12 +7,6 @@ from PIL import Image, ImageDraw, ImageFont
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# Пытаемся импортировать Request из двух возможных местоположений
-try:
-    from telegram.request import Request
-except ImportError:
-    from telegram._request import Request
-
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -33,10 +27,6 @@ CACHE_TTL = 600  # время жизни кэша в секундах (10 мин
 weather_cache = {}  # словарь для хранения данных по городам
 
 def get_weather(city: str):
-    """
-    Получает данные текущей погоды и прогноз по городу.
-    Если данные есть в кэше и не устарели, возвращает их.
-    """
     now = time.time()
     city_key = city.lower()
     if city_key in weather_cache:
@@ -50,7 +40,6 @@ def get_weather(city: str):
     if response_current.status_code != 200:
         return None, None
     current_data = response_current.json()
-
     if current_data.get("cod") != 200:
         return None, None
 
@@ -64,10 +53,6 @@ def get_weather(city: str):
     return current_data, forecast_data
 
 def generate_weather_image(weather: dict, forecast: dict):
-    """
-    Генерирует изображение с информацией о погоде.
-    Цвет фона выбирается в зависимости от погодных условий.
-    """
     main_weather = weather["weather"][0]["main"]
     description = weather["weather"][0]["description"].capitalize()
     temp = weather["main"]["temp"]
@@ -147,8 +132,7 @@ async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(photo=image_bytes, caption=caption)
 
 def main():
-    req = Request(connect_timeout=10, read_timeout=20)
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).request(req).build()
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, weather_handler))
