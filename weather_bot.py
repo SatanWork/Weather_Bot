@@ -5,8 +5,8 @@ import requests
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from telegram.utils.request import Request  # Новый импорт для настройки таймаута
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.utils.request import Request
 
 # Настройка логирования
 logging.basicConfig(
@@ -25,12 +25,12 @@ if not TELEGRAM_TOKEN or not WEATHER_API_KEY:
 
 # Настройки кэширования
 CACHE_TTL = 600  # время жизни кэша в секундах (10 минут)
-weather_cache = {}  # словарь для хранения данных по городам: ключ - название города (нижний регистр), значение - (timestamp, current_data, forecast_data)
+weather_cache = {}  # словарь для хранения данных по городам
 
 def get_weather(city: str):
     """
     Получает данные текущей погоды и прогноз по городу.
-    Если данные уже есть в кэше и не устарели, возвращает их из кэша.
+    Если данные есть в кэше и не устарели, возвращает их.
     """
     now = time.time()
     city_key = city.lower()
@@ -46,7 +46,6 @@ def get_weather(city: str):
         return None, None
     current_data = response_current.json()
 
-    # Проверяем корректность ответа API (например, если город не найден, OpenWeatherMap возвращает cod != 200)
     if current_data.get("cod") != 200:
         return None, None
 
@@ -56,51 +55,42 @@ def get_weather(city: str):
     if response_forecast.status_code == 200:
         forecast_data = response_forecast.json()
 
-    # Сохраняем данные в кэш
     weather_cache[city_key] = (now, current_data, forecast_data)
     return current_data, forecast_data
 
 def generate_weather_image(weather: dict, forecast: dict):
     """
     Генерирует изображение с информацией о погоде.
-    Цвет фона подбирается в зависимости от погодного состояния (Clear, Clouds, Rain, Snow и т.д.),
-    накладывается текст с описанием погоды, температурой и скоростью ветра, а также уведомление,
-    если прогноз меняется (например, дождь).
+    Цвет фона выбирается в зависимости от погодных условий.
     """
     main_weather = weather["weather"][0]["main"]
     description = weather["weather"][0]["description"].capitalize()
     temp = weather["main"]["temp"]
     wind_speed = weather["wind"]["speed"]
 
-    # Выбор цвета фона
     if main_weather == "Clear":
-        bg_color = (135, 206, 235)  # светло-голубой для ясной погоды
+        bg_color = (135, 206, 235)
     elif main_weather == "Clouds":
-        bg_color = (192, 192, 192)  # серый для облачно
+        bg_color = (192, 192, 192)
     elif main_weather == "Rain":
-        bg_color = (100, 100, 100)  # темно-серый для дождя
+        bg_color = (100, 100, 100)
     elif main_weather == "Snow":
-        bg_color = (255, 250, 250)  # слегка голубоватый белый для снега
+        bg_color = (255, 250, 250)
     else:
-        bg_color = (200, 200, 200)  # универсальный серый оттенок
+        bg_color = (200, 200, 200)
 
-    # Создание изображения
     width, height = 800, 400
     image = Image.new("RGB", (width, height), color=bg_color)
     draw = ImageDraw.Draw(image)
 
-    # Попытка загрузить шрифт arial.ttf, иначе используется шрифт по умолчанию
     try:
         font = ImageFont.truetype("arial.ttf", 40)
     except IOError:
         font = ImageFont.load_default()
 
-    # Формирование основного текста
     text = f"Погода: {description}\nТемпература: {temp}°C\nВетер: {wind_speed} м/с"
     draw.multiline_text((50, 50), text, fill=(0, 0, 0), font=font, spacing=10)
 
-    # Анализируем прогноз: если ближайший прогноз (следующие 3 часа) отличается от текущего состояния,
-    # добавляем уведомление (например, взять зонт при дожде)
     forecast_message = ""
     if forecast and "list" in forecast and len(forecast["list"]) > 0:
         next_forecast = forecast["list"][0]
@@ -114,42 +104,30 @@ def generate_weather_image(weather: dict, forecast: dict):
     if forecast_message:
         draw.text((50, 250), forecast_message, fill=(0, 0, 0), font=font)
 
-    # Сохранение изображения в BytesIO для отправки в Telegram
     img_byte_arr = BytesIO()
     image.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     return img_byte_arr
 
-def start_handler(update: Update, context: CallbackContext):
-    """
-    Обработчик команды /start.
-    """
-    update.message.reply_text("Привет! Напиши название города, чтобы узнать погоду.")
+async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Привет! Напиши название города, чтобы узнать погоду.")
 
-def weather_handler(update: Update, context: CallbackContext):
-    """
-    Обработчик текстовых сообщений – ожидается название города.
-    Если город введён с ошибкой или API не возвращает данные, выводится сообщение с просьбой проверить название.
-    """
+async def weather_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     city = update.message.text.strip()
-    logger.info(f"Получен запрос для города: {city}")
+    logger.info(f"Запрос для города: {city}")
     current_data, forecast_data = get_weather(city)
     if current_data is None:
-        update.message.reply_text(
+        await update.message.reply_text(
             "Проверьте правильность названия города! Используйте формат, например: Москва, Санкт-Петербург и т.д."
         )
         return
 
-    # Генерация изображения с погодой
     image_bytes = generate_weather_image(current_data, forecast_data)
-
-    # Формирование подписи к изображению
     description = current_data["weather"][0]["description"].capitalize()
     temp = current_data["main"]["temp"]
     wind_speed = current_data["wind"]["speed"]
     caption = f"Погода: {description}\nТемпература: {temp}°C\nВетер: {wind_speed} м/с"
 
-    # Добавление прогнозного уведомления, если оно имеется
     forecast_message = ""
     if forecast_data and "list" in forecast_data and len(forecast_data["list"]) > 0:
         next_forecast = forecast_data["list"][0]
@@ -161,22 +139,17 @@ def weather_handler(update: Update, context: CallbackContext):
             else:
                 forecast_message = f"\nВ ближайшее время ожидается: {forecast_description}"
     caption += forecast_message
-
-    # Отправка изображения с подписью
-    update.message.reply_photo(photo=image_bytes, caption=caption)
+    await update.message.reply_photo(photo=image_bytes, caption=caption)
 
 def main():
-    # Создаем объект Request с увеличенными параметрами таймаута
     req = Request(connect_timeout=10, read_timeout=20)
-    updater = Updater(token=TELEGRAM_TOKEN, request=req)
-    dp = updater.dispatcher
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).request(req).build()
 
-    dp.add_handler(CommandHandler("start", start_handler))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, weather_handler))
+    application.add_handler(CommandHandler("start", start_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, weather_handler))
 
     logger.info("Бот запущен...")
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
