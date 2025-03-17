@@ -6,6 +6,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.utils.request import Request  # Новый импорт для настройки таймаута
 
 # Настройка логирования
 logging.basicConfig(
@@ -165,8 +166,9 @@ def weather_handler(update: Update, context: CallbackContext):
     update.message.reply_photo(photo=image_bytes, caption=caption)
 
 def main():
-    # Инициализация updater и диспетчера
-    updater = Updater(TELEGRAM_TOKEN)
+    # Создаем объект Request с увеличенными параметрами таймаута
+    req = Request(connect_timeout=10, read_timeout=20)
+    updater = Updater(token=TELEGRAM_TOKEN, request=req)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start_handler))
